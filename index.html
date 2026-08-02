@@ -1,0 +1,369 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Makro Key Manager</title>
+<style>
+:root{
+  --bg:#0f172a; --card:#1e293b; --border:#334155;
+  --yellow:#facc15; --red:#ef4444; --cyan:#22d3ee; --green:#65a30d;
+  --pink:#f472b6; --purple:#8b5cf6; --blue:#93c5fd;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,'Sarabun',sans-serif;background:var(--bg);color:#fff;padding-bottom:40px}
+h1{text-align:center;padding:16px 16px 4px}
+.hint{text-align:center;color:#94a3b8;font-size:13px;padding:0 16px 12px;line-height:1.5}
+.hint b{color:#fbbf24}
+
+/* ---- key pool ---- */
+.pool-wrap{padding:0 16px 8px}
+.pool{background:var(--card);border:2px dashed var(--border);border-radius:14px;padding:12px;display:flex;gap:10px;flex-wrap:wrap;min-height:56px;align-items:center;transition:.15s}
+.pool.target{border-color:var(--cyan);background:#1e2b45}
+.pool-label{width:100%;font-size:12px;color:#94a3b8;margin-bottom:2px}
+.pool-empty{font-size:13px;color:#64748b}
+
+/* ---- grid ---- */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:8px 16px}
+@media(max-width:520px){.grid{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--card);border-radius:16px;padding:10px 8px;text-align:center;min-height:110px;border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;transition:.15s}
+.card.target{border-color:var(--cyan);box-shadow:0 0 0 2px var(--cyan) inset}
+.avatar{font-size:32px}
+.name{font-weight:bold;font-size:14px}
+.pos{font-size:10px;color:#94a3b8}
+.key{margin-top:2px;background:var(--yellow);color:#111;padding:5px 10px;border-radius:20px;font-weight:bold;font-size:13px;cursor:pointer;user-select:none}
+.key.selected{outline:3px solid #fff;transform:scale(1.06)}
+.master{background:var(--purple);color:#fff;cursor:default}
+.empty-slot{font-size:11px;color:#64748b;padding:5px 10px}
+
+/* ---- schedule table ---- */
+.sched-title{padding:20px 16px 4px;font-size:16px;font-weight:bold;text-align:center}
+.sched-sub{text-align:center;font-size:12px;color:#94a3b8;padding-bottom:10px}
+.sched-scroll{overflow-x:auto;padding:0 8px 8px;-webkit-overflow-scrolling:touch}
+table.sched{border-collapse:collapse;font-size:11px;white-space:nowrap}
+table.sched th, table.sched td{border:1px solid #334155;padding:3px 4px;text-align:center}
+table.sched thead th{position:sticky;top:0;z-index:2}
+.namecol{position:sticky;left:0;background:#1e293b;z-index:1;text-align:left;font-weight:bold;min-width:52px}
+thead .namecol{background:#1e293b;z-index:3}
+.day-FRI,.day-MON,.day-TUE,.day-WED,.day-THU{background:var(--yellow);color:#111}
+.day-SAT,.day-SUN{background:var(--red);color:#fff}
+.v-shift{background:#60a5fa;color:#111;font-weight:bold}
+.v-off{background:var(--pink);color:#111;font-weight:bold}
+.v-st{background:var(--green);color:#111;font-weight:bold}
+.v-empty{color:#475569}
+.today-col{outline:2px solid #fbbf24;outline-offset:-2px}
+.offday-badge{display:inline-block;padding:2px 6px;border-radius:6px;color:#111;font-weight:bold;font-size:10px}
+.od-MON{background:var(--yellow)} .od-TUE{background:var(--pink)} .od-WED{background:var(--green);color:#fff}
+.od-THU{background:#f59e0b} .od-FRI{background:var(--cyan)} .od-SAT{background:var(--red);color:#fff} .od-SUN{background:var(--red);color:#fff}
+
+.whoami{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px 0;font-size:13px;flex-wrap:wrap}
+.whoami select{background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px}
+.whoami .label{color:#94a3b8}
+
+/* ---- history log ---- */
+.history-title{padding:18px 16px 4px;font-size:15px;font-weight:bold;text-align:center}
+.history-box{max-width:600px;margin:0 auto;padding:0 16px 4px;font-size:12px;color:#cbd5e1}
+.history-item{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #1e293b}
+.history-empty{text-align:center;color:#64748b;padding:10px 0;font-size:12px}
+.h-time{color:#64748b;white-space:nowrap;font-size:11px}
+
+/* ---- upcoming shift on card ---- */
+.shift-info{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:2px}
+.shift-badge{font-size:9px;padding:2px 5px;border-radius:5px;background:#334155;color:#cbd5e1;font-weight:bold}
+
+.legend span{display:inline-block;padding:2px 8px;border-radius:6px;margin-right:6px;font-weight:bold}
+.note{padding:0 16px;font-size:11px;color:#f59e0b;text-align:center;max-width:600px;margin:8px auto 0}
+</style></head><body>
+
+<h1>🔑 Makro Key Manager</h1>
+<div class="whoami">
+  <span class="label">คุณคือ:</span>
+  <select id="whoamiSelect"></select>
+</div>
+<div class="hint">แตะ <b>กุญแจ</b> เพื่อเลือก แล้วแตะ <b>คนที่จะให้ยืม</b> (หรือแตะ "คลังกุญแจ" เพื่อคืน)<br><span id="syncStatus" style="color:#64748b">🔄 กำลังเชื่อมต่อ...</span></div>
+
+<div class="pool-wrap">
+  <div class="pool" id="pool">
+    <div class="pool-label">คลังกุญแจ (ยังไม่มีคนถือ)</div>
+    <div class="pool-empty" id="poolEmpty">— ไม่มีกุญแจว่าง —</div>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="history-title">📜 ประวัติการยืม-คืนกุญแจ</div>
+<div class="history-box" id="historyBox"><div class="history-empty">— ยังไม่มีประวัติ —</div></div>
+
+<div class="sched-title">📅 ตารางกะประจำเดือน</div>
+<div class="sched-sub">🌅 47* = กะเช้า &nbsp;&nbsp; 🌇 21* = กะบ่าย</div>
+<div class="sched-scroll">
+  <table class="sched" id="schedTable"></table>
+</div>
+
+<div class="legend" id="legend"></div>
+<div class="note">⚠️ ข้อมูลตารางกะคัดลอกมาจากรูปภาพด้วยการอ่านด้วยตา อาจมีจุดผิดพลาดได้ กรุณาตรวจทานกับตารางกะฉบับจริงก่อนใช้งานอ้างอิงครับ (โดยเฉพาะแถวของ "จิ๊บ" ที่ใช้ ST57 และตัวเลขที่ใกล้เคียงกัน เช่น 19/21*/47*/31)</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script>
+/* ---------- Firebase (real-time sync across all phones) ---------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyDsElHx6vNLivojslEdXIwxeeaCr8qqBA8",
+  authDomain: "makro-key-manager.firebaseapp.com",
+  databaseURL: "https://makro-key-manager-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "makro-key-manager",
+  storageBucket: "makro-key-manager.firebasestorage.app",
+  messagingSenderId: "398378066181",
+  appId: "1:398378066181:web:4ad6076520997cb92b576c"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const keyRef = db.ref('keyState');
+const historyRef = db.ref('history');
+
+/* ---------- who am I ---------- */
+const WHOAMI_STORAGE = 'makro_key_manager_whoami';
+let whoAmI = localStorage.getItem(WHOAMI_STORAGE) || '';
+
+/* ---------- employee + key data ---------- */
+const employees = [
+  {id:'kant', name:'กานต์', pos:'SM-HR', off:'SUN'},
+  {id:'nat',  name:'นัท',   pos:'-',     off:null},
+  {id:'diew', name:'เดี่ยว', pos:'SM-Butchery', off:'WED'},
+  {id:'lek',  name:'เล็ก',  pos:'SM-FISH', off:'FRI'},
+  {id:'opor', name:'โอปอ',  pos:'SM-FV', off:'TUE'},
+  {id:'ii',   name:'อิ๊',   pos:'SM-Frozen', off:'MON'},
+  {id:'anek', name:'เอนก',  pos:'SM-Nonfresh', off:'SUN'},
+  {id:'jib',  name:'จิ๊บ',  pos:'SM-GR', off:'TUE'},
+  {id:'pong', name:'โป่ง',  pos:'SM-CheckOut', off:'MON'},
+  {id:'tua',  name:'ตั้ว',  pos:'SM-GA', off:'TUE', master:true},
+];
+
+// populate who-am-I dropdown
+const whoamiSelect = document.getElementById('whoamiSelect');
+whoamiSelect.innerHTML = '<option value="">-- เลือกชื่อคุณ --</option>' +
+  employees.map(e=>`<option value="${e.name}">${e.name}</option>`).join('');
+whoamiSelect.value = whoAmI;
+whoamiSelect.onchange = ()=>{
+  whoAmI = whoamiSelect.value;
+  localStorage.setItem(WHOAMI_STORAGE, whoAmI);
+};
+
+const DEFAULT_KEY_STATE = { k1:'nat', k2:'diew', k3:'lek', k4:'pong', k5:'opor' };
+let keyState = DEFAULT_KEY_STATE;
+let selectedKey = null;
+let firebaseReady = false;
+
+// listen for real-time changes from ANY phone
+keyRef.on('value', (snap)=>{
+  const val = snap.val();
+  if(val){
+    keyState = val;
+  } else {
+    // first time ever: seed the database with the default state
+    keyRef.set(DEFAULT_KEY_STATE);
+    keyState = DEFAULT_KEY_STATE;
+  }
+  firebaseReady = true;
+  document.getElementById('syncStatus').innerHTML = '🟢 เชื่อมต่อแล้ว — ข้อมูลอัปเดตพร้อมกันทุกเครื่อง';
+  render();
+}, (err)=>{
+  document.getElementById('syncStatus').innerHTML = '🔴 เชื่อมต่อไม่ได้ (' + err.message + ')';
+});
+
+historyRef.limitToLast(20).on('value', (snap)=>{
+  const box = document.getElementById('historyBox');
+  const val = snap.val();
+  if(!val){ box.innerHTML = '<div class="history-empty">— ยังไม่มีประวัติ —</div>'; return; }
+  const items = Object.values(val).sort((a,b)=>b.ts-a.ts);
+  box.innerHTML = items.map(h=>{
+    const d = new Date(h.ts);
+    const time = d.toLocaleString('th-TH', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+    const line = h.action==='assign'
+      ? `<b>${h.by||'?'}</b> ให้กุญแจ ${h.key} แก่ <b>${h.to}</b>`
+      : `<b>${h.by||'?'}</b> คืนกุญแจ ${h.key} เข้าคลัง`;
+    return `<div class="history-item"><span>${line}</span><span class="h-time">${time}</span></div>`;
+  }).join('');
+});
+
+function saveState(){ keyRef.set(keyState); }
+
+function ownerOfKey(keyId){ return keyState[keyId]; }
+function keyOfEmployee(empId){
+  for(const k in keyState){ if(keyState[k]===empId) return k; }
+  return null;
+}
+
+function selectKey(keyId){
+  selectedKey = (selectedKey===keyId) ? null : keyId;
+  render();
+}
+
+function requireWhoAmI(){
+  if(!whoAmI){
+    alert('กรุณาเลือกชื่อคุณที่ช่อง "คุณคือ:" ด้านบนก่อนครับ');
+    whoamiSelect.focus();
+    return false;
+  }
+  return true;
+}
+
+function logHistory(action, keyId, empId){
+  const empName = empId ? (employees.find(e=>e.id===empId)?.name || empId) : 'คลังกุญแจ';
+  historyRef.push({
+    action,               // 'assign' | 'return'
+    key: keyId.toUpperCase(),
+    to: empName,
+    by: whoAmI,
+    ts: Date.now()
+  });
+}
+
+function assignTo(empId){
+  if(!selectedKey) return;
+  if(!requireWhoAmI()) return;
+  const emp = employees.find(e=>e.id===empId);
+  if(emp.master){ return; }
+  if(keyOfEmployee(empId)){ alert('คนนี้มีกุญแจอยู่แล้วครับ'); return; }
+  keyState[selectedKey] = empId;
+  logHistory('assign', selectedKey, empId);
+  selectedKey = null;
+  saveState();
+  render();
+}
+
+function returnToPool(){
+  if(!selectedKey) return;
+  if(!requireWhoAmI()) return;
+  keyState[selectedKey] = null;
+  logHistory('return', selectedKey, null);
+  selectedKey = null;
+  saveState();
+  render();
+}
+
+function shiftLabel(code){
+  if(code==='-' || code===undefined) return '-';
+  if(code==='47*') return '🌅 เช้า';
+  if(code==='21*') return '🌇 บ่าย';
+  if(code==='OFF') return 'หยุด';
+  if(code==='AL') return 'ลาพักร้อน';
+  if(code==='CDO') return 'ชดเชย';
+  if(code==='ST57') return 'ST57';
+  return code;
+}
+
+function shiftInfoHtml(empId){
+  const row = schedule[empId];
+  if(!row || typeof todayIdx==='undefined' || todayIdx<0) return '';
+  const todayCode = row[todayIdx];
+  const tomorrowCode = row[todayIdx+1];
+  if(todayCode===undefined) return '';
+  return `<div class="shift-info">
+    <span class="shift-badge ${cellClass(todayCode)}">วันนี้: ${shiftLabel(todayCode)}</span>
+    ${tomorrowCode!==undefined ? `<span class="shift-badge ${cellClass(tomorrowCode)}">พรุ่งนี้: ${shiftLabel(tomorrowCode)}</span>` : ''}
+  </div>`;
+}
+
+function render(){
+  // pool
+  const poolEl = document.getElementById('pool');
+  const poolEmpty = document.getElementById('poolEmpty');
+  poolEl.querySelectorAll('.key').forEach(k=>k.remove());
+  let free = [];
+  for(const k in keyState){ if(!keyState[k]) free.push(k); }
+  poolEmpty.style.display = free.length ? 'none' : 'block';
+  free.forEach(k=>{
+    const chip = document.createElement('div');
+    chip.className = 'key' + (selectedKey===k ? ' selected':'');
+    chip.textContent = '🔑 ' + k.toUpperCase();
+    chip.onclick = ()=>selectKey(k);
+    poolEl.appendChild(chip);
+  });
+  poolEl.classList.toggle('target', !!selectedKey);
+  poolEl.onclick = (e)=>{ if(e.target===poolEl || e.target===poolEmpty) returnToPool(); };
+
+  // grid
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  employees.forEach(emp=>{
+    const card = document.createElement('div');
+    card.className = 'card' + (selectedKey && !emp.master && !keyOfEmployee(emp.id) ? ' target':'');
+    const heldKey = keyOfEmployee(emp.id);
+    card.innerHTML = `<div class="avatar">👤</div><div class="name">${emp.name}</div><div class="pos">${emp.pos}</div>${shiftInfoHtml(emp.id)}`;
+    if(emp.master){
+      card.innerHTML += `<div class="key master">👑 MASTER KEY</div>`;
+    } else if(heldKey){
+      card.innerHTML += `<div class="key ${selectedKey===heldKey?'selected':''}" data-key="${heldKey}">🔑 ${heldKey.toUpperCase()}</div>`;
+    } else {
+      card.innerHTML += `<div class="empty-slot">— ว่าง —</div>`;
+    }
+    card.onclick = (e)=>{
+      const keyEl = e.target.closest('.key');
+      if(keyEl && keyEl.dataset.key){ selectKey(keyEl.dataset.key); return; }
+      if(!emp.master) assignTo(emp.id);
+    };
+    grid.appendChild(card);
+  });
+}
+
+/* ---------- schedule table ---------- */
+const dates = ["31","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31"];
+const dows  = ["FRI","SAT","SUN","MON","TUE","WED","THU","FRI","SAT","SUN","MON","TUE","WED","THU","FRI","SAT","SUN","MON","TUE","WED","THU","FRI","SAT","SUN","MON","TUE","WED","THU","FRI","SAT","SUN","MON"];
+
+const schedule = {
+  kant: ["07","07","OFF","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","ST57","07","07","07","07","07","11","OFF","07","07","07","07"],
+  nat:  Array(32).fill("-"),
+  diew: ["19","01","01","47*","01","OFF","AL","01","01","01","47*","47*","OFF","01","AL","01","01","47*","47*","OFF","01","47*","01","01","01","47*","OFF","01","01","01","01","47*"],
+  lek:  ["01","01","01","01","47*","01","CDO","OFF","19","19","21*","19","19","19","OFF","AL","19","31","21*","21*","01","31","OFF","01","47*","01","47*","AL","OFF","19","19","19"],
+  opor: ["19","19","19","21*","OFF","19","21*","21*","AL","19","19","OFF","01","47*","AL","01","47*","01","OFF","01","01","21*","OFF","CDO","AL","21*","19","19","21*","OFF","CDO","AL"],
+  ii:   ["19","19","19","OFF","CDO","47*","47*","01","01","01","OFF","21*","19","21*","21*","19","AL","OFF","01","47*","01","21*","19","CDO","OFF","AL","01","01","47*","01","01","OFF"],
+  anek: ["01","47*","OFF","19","21*","21*","19","19","11","OFF","AL","CDO","CDO","01","47*","01","OFF","CDO","19","19","21*","19","47*","OFF","19","19","21*","21*","11","47*","OFF","01"],
+  jib:  ["07","05","47*","CDO","OFF","05","05","47*","47*","05","AL","OFF","47*","05","05","47*","05","05","OFF","05","47*","05","05","05","AL","OFF","47*","05","05","47*","05","05"],
+  pong: ["21*","11","21*","OFF","19","11","11","11","21*","21*","OFF","CDO","21*","11","19","11","21*","OFF","CDO","11","AL","AL","11","47*","OFF","21*","19","19","11","11","21*","OFF"],
+  tua:  ["47*","21*","11","11","OFF","11","11","21","CDO","47*","05","OFF","CDO","AL","19","21*","11","21*","OFF","01","03","01","21*","21*","11","OFF","AL","19","19","21*","11","11"],
+};
+
+// figure out "today" column index (data represents 31 Jul - 31 Aug 2026)
+function computeTodayIndex(){
+  const now = new Date();
+  if(now.getFullYear()!==2026 || now.getMonth()+1 < 7) return -1;
+  if(now.getMonth()+1===7 && now.getDate()===31) return 0;
+  if(now.getMonth()+1===8) return now.getDate();
+  return -1;
+}
+const todayIdx = computeTodayIndex();
+
+function cellClass(v){
+  if(v==='-') return 'v-empty';
+  if(v==='ST57') return 'v-st';
+  if(v==='OFF'||v==='AL'||v==='CDO') return 'v-off';
+  if(v.includes('*')||v==='31') return 'v-shift';
+  return '';
+}
+
+function buildSchedTable(){
+  const table = document.getElementById('schedTable');
+  let html = '<thead><tr><th class="namecol">ชื่อ</th>';
+  dows.forEach((d,i)=> html += `<th class="day-${d}${i===todayIdx?' today-col':''}">${d}</th>`);
+  html += '</tr><tr><th class="namecol">วันหยุด</th>';
+  dates.forEach((d,i)=> html += `<th class="day-${dows[i]}${i===todayIdx?' today-col':''}">${d}</th>`);
+  html += '</tr></thead><tbody>';
+  employees.forEach(emp=>{
+    if(emp.master){ /* still show ตั้ว's row */ }
+    html += `<tr><td class="namecol">${emp.name}${emp.off?`<br><span class="offday-badge od-${emp.off}">${emp.off}</span>`:''}</td>`;
+    const row = schedule[emp.id] || Array(32).fill('-');
+    row.forEach((v,i)=>{
+      html += `<td class="${cellClass(v)}${i===todayIdx?' today-col':''}">${v}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+buildSchedTable();
+
+document.getElementById('legend').innerHTML = `
+  <div><span class="v-shift">47*</span> กะเช้า &nbsp; <span class="v-shift">21*</span> กะบ่าย</div>
+  <div><span class="v-off">OFF</span> วันหยุดประจำสัปดาห์ &nbsp; <span class="v-off">AL</span> ลาพักร้อน &nbsp; <span class="v-off">CDO</span> วันหยุดชดเชย</div>
+  <div><span class="v-st">ST57</span> รหัสงาน/คอร์สพิเศษ (โปรดตรวจสอบความหมายกับ HR)</div>
+  <div>ตัวเลขอื่น (19, 01, 05, 07, 11 ฯลฯ) = รหัสกะ/เวลาเข้างานตามตารางต้นฉบับ</div>
+`;
+</script>
+</body></html>
